@@ -1,0 +1,313 @@
+
+project build/
+diff --git a/core/Makefile b/core/Makefile
+index d804c37..877b53e 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -1093,6 +1093,16 @@ define create-system-vendor-symlink
+ endef
+ endif
+ 
++# Only Create symlink /system/vendor to /vendor if necessary.
++define create-system-vendor-symlink
++$(hide) if [ -d $(TARGET_OUT)/vendor ] && [ ! -h $(TARGET_OUT)/vendor ]; then \
++  echo 'Non-symlink $(TARGET_OUT)/vendor detected!' 1>&2; \
++  echo 'You cannot install files to $(TARGET_OUT)/vendor while building a separate vendor.img!' 1>&2; \
++  exit 1; \
++fi
++$(hide) ln -sf /vendor $(TARGET_OUT)/vendor
++endef
++
+ # $(1): output file
+ define build-systemimage-target
+   @echo "Target system fs image: $(1)"
+diff --git a/core/main.mk b/core/main.mk
+index 651ba98..d2be661 100644
+--- a/core/main.mk
++++ b/core/main.mk
+@@ -390,6 +390,7 @@ tags_to_install :=
+ ifneq (,$(user_variant))
+   # Target is secure in user builds.
+   ADDITIONAL_DEFAULT_PROPERTIES += ro.secure=1
++  ADDITIONAL_DEFAULT_PROPERTIES += ro.adb.secure=1
+   ADDITIONAL_DEFAULT_PROPERTIES += security.perf_harden=1
+ 
+   ifeq ($(user_variant),user)
+diff --git a/target/product/core.mk b/target/product/core.mk
+index 75cf649..5f67241 100644
+--- a/target/product/core.mk
++++ b/target/product/core.mk
+@@ -24,7 +24,6 @@ PRODUCT_PACKAGES += \
+     BasicDreams \
+     BlockedNumberProvider \
+     BookmarkProvider \
+-    Browser2 \
+     Calendar \
+     CalendarProvider \
+     CaptivePortalLogin \
+@@ -33,7 +32,6 @@ PRODUCT_PACKAGES += \
+     DeskClock \
+     DocumentsUI \
+     DownloadProviderUi \
+-    Email \
+     ExactCalculator \
+     ExternalStorageProvider \
+     FusedLocation \
+@@ -41,7 +39,6 @@ PRODUCT_PACKAGES += \
+     KeyChain \
+     Keyguard \
+     LatinIME \
+-    Launcher2 \
+     ManagedProvisioning \
+     MtpDocumentsProvider \
+     PicoTts \
+@@ -50,7 +47,6 @@ PRODUCT_PACKAGES += \
+     PrintSpooler \
+     PrintRecommendationService \
+     ProxyHandler \
+-    QuickSearchBox \
+     Settings \
+     SharedStorageBackup \
+     Telecom \
+diff --git a/target/product/full_base.mk b/target/product/full_base.mk
+index 65bdf0f..863dadc 100644
+--- a/target/product/full_base.mk
++++ b/target/product/full_base.mk
+@@ -23,20 +23,9 @@ PRODUCT_PACKAGES := \
+     libfwdlockengine \
+     OpenWnn \
+     libWnnEngDic \
+-    libWnnJpnDic \
+     libwnndict \
+     WAPPushManager
+ 
+-PRODUCT_PACKAGES += \
+-    Galaxy4 \
+-    HoloSpiralWallpaper \
+-    LiveWallpapers \
+-    LiveWallpapersPicker \
+-    MagicSmokeWallpapers \
+-    NoiseField \
+-    PhaseBeam \
+-    PhotoTable
+-
+ # Additional settings used in all AOSP builds
+ PRODUCT_PROPERTY_OVERRIDES := \
+     ro.config.ringtone=Ring_Synth_04.ogg \
+
+project device/huawei/angler/
+diff --git a/device.mk b/device.mk
+index 41c65a4..557f3a0 100644
+--- a/device.mk
++++ b/device.mk
+@@ -86,7 +86,8 @@ PRODUCT_COPY_FILES += \
+ 
+ # for launcher layout
+ PRODUCT_PACKAGES += \
+-    AnglerLayout
++    AnglerLayout \
++    DataWidget
+ 
+ # include fingerprintd
+ PRODUCT_PACKAGES += \
+@@ -174,6 +175,9 @@ PRODUCT_AAPT_PREBUILT_DPI := xxxhdpi xxhdpi xhdpi hdpi
+ PRODUCT_CHARACTERISTICS := nosdcard
+ 
+ PRODUCT_PACKAGES += \
++    libprotobuf-cpp-full
++
++PRODUCT_PACKAGES += \
+     gralloc.msm8994 \
+     hwcomposer.msm8994 \
+     libgenlock \
+@@ -476,6 +480,6 @@ PRODUCT_COPY_FILES += \
+     device/huawei/angler/location/etc/gps.conf:system/etc/gps.conf:qcom
+ 
+ # setup dm-verity configs.
+-PRODUCT_SYSTEM_VERITY_PARTITION := /dev/block/platform/soc.0/f9824900.sdhci/by-name/system
+-PRODUCT_VENDOR_VERITY_PARTITION := /dev/block/platform/soc.0/f9824900.sdhci/by-name/vendor
+-$(call inherit-product, build/target/product/verity.mk)
++#PRODUCT_SYSTEM_VERITY_PARTITION := /dev/block/platform/soc.0/f9824900.sdhci/by-name/system
++#PRODUCT_VENDOR_VERITY_PARTITION := /dev/block/platform/soc.0/f9824900.sdhci/by-name/vendor
++#$(call inherit-product, build/target/product/verity.mk)
+diff --git a/fstab.angler b/fstab.angler
+index de0e0b1..d67e07f 100644
+--- a/fstab.angler
++++ b/fstab.angler
+@@ -3,9 +3,9 @@
+ # The filesystem that contains the filesystem checker binary (typically /system) cannot
+ # specify MF_CHECK, and must come before any filesystems that do specify MF_CHECK
+ 
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/system       /system         ext4    ro,barrier=1,inode_readahead_blks=8                             wait,verify=/dev/block/platform/soc.0/f9824900.sdhci/by-name/metadata
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/vendor       /vendor         ext4    ro,barrier=1,inode_readahead_blks=8                             wait,verify=/dev/block/platform/soc.0/f9824900.sdhci/by-name/metadata
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata     /data           ext4    noatime,nosuid,nodev,barrier=1,data=ordered,nomblk_io_submit,noauto_da_alloc,discard,errors=panic,inode_readahead_blks=8 wait,check,forcefdeorfbe=/dev/block/platform/soc.0/f9824900.sdhci/by-name/metadata
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/system       /system         ext4    ro,barrier=1				wait
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/vendor       /vendor         ext4    ro,barrier=1				wait
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata     /data           ext4    noatime,nosuid,nodev,barrier=1,data=ordered,nomblk_io_submit,noauto_da_alloc,discard,errors=panic wait,check,encryptable=/dev/block/platform/soc.0/f9824900.sdhci/by-name/metadata
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/cache        /cache          ext4    noatime,nosuid,nodev,barrier=1,data=ordered,nomblk_io_submit,noauto_da_alloc,errors=panic wait,check
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/persist      /persist        ext4    nosuid,nodev,barrier=1,data=ordered,nodelalloc,nomblk_io_submit,errors=panic wait,notrim
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/modem        /firmware       vfat    ro,shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_file:s0        wait
+diff --git a/fstab.aosp_angler b/fstab.aosp_angler
+index ab57d3a..d937eee 100644
+--- a/fstab.aosp_angler
++++ b/fstab.aosp_angler
+@@ -1,11 +1,12 @@
++
+ # Android fstab file.
+ #<src>                                         <mnt_point>  <type>  <mnt_flags and options>  <fs_mgr_flags>
+ # The filesystem that contains the filesystem checker binary (typically /system) cannot
+ # specify MF_CHECK, and must come before any filesystems that do specify MF_CHECK
+ 
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/system       /system         ext4    ro,barrier=1,inode_readahead_blks=8                             wait,verify=/dev/block/platform/soc.0/f9824900.sdhci/by-name/metadata
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/vendor       /vendor         ext4    ro,barrier=1,inode_readahead_blks=8                             wait
+-/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata     /data           ext4    noatime,nosuid,nodev,barrier=1,data=ordered,nomblk_io_submit,noauto_da_alloc,discard,errors=panic,inode_readahead_blks=8 wait,check,forcefdeorfbe=/dev/block/platform/soc.0/f9824900.sdhci/by-name/metadata
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/system       /system         ext4    ro,barrier=1                              wait
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/vendor       /vendor         ext4    ro,barrier=1                              wait
++/dev/block/platform/soc.0/f9824900.sdhci/by-name/userdata     /data           ext4    noatime,nosuid,nodev,barrier=1,data=ordered,nomblk_io_submit,noauto_da_alloc,discard,errors=panic wait,check,encryptable=/dev/block/platform/soc.0/f98$
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/cache        /cache          ext4    noatime,nosuid,nodev,barrier=1,data=ordered,nomblk_io_submit,noauto_da_alloc,errors=panic wait,check
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/persist      /persist        ext4    nosuid,nodev,barrier=1,data=ordered,nodelalloc,nomblk_io_submit,errors=panic wait,notrim
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/modem        /firmware       vfat    ro,shortname=lower,uid=1000,gid=1000,dmask=227,fmask=337,context=u:object_r:firmware_file:s0        wait
+@@ -26,3 +27,4 @@
+ /dev/block/platform/soc.0/f9824900.sdhci/by-name/cmnlib       /cmnlib        emmc    defaults                                                        defaults
+ /devices/*/xhci-hcd.0.auto/usb*                               auto           auto    defaults                                                        voldmanaged=usb:auto
+ /dev/block/zram0                                              none           swap    defaults                                                        zramsize=533413200,notrim
++
+diff --git a/init.angler.rc b/init.angler.rc
+index a928ffd..96e4d39 100755
+--- a/init.angler.rc
++++ b/init.angler.rc
+@@ -23,9 +23,6 @@ on early-init
+     chown system system /sys/kernel/debug/kgsl/proc
+ 
+ on init
+-    # Load persistent dm-verity state
+-    verity_load_state
+-
+     # Set permissions for persist partition
+     mkdir /persist 0771 system system
+     mkdir /firmware 0771 system system
+@@ -57,9 +54,6 @@ on early-boot
+     # set RLIMIT_MEMLOCK to 64MB
+     setrlimit 8 67108864 67108864
+ 
+-    # Update dm-verity state and set partition.*.verified properties
+-    verity_update_state
+-
+ on boot
+     # execute script to set initial CPU settings
+     # don't run as a service to avoid race conditions
+@@ -361,12 +355,12 @@ service loc_launcher /vendor/bin/loc_launcher
+     writepid /dev/cpuset/system-background/tasks
+ 
+ # bugreport is triggered by holding down volume down, volume up and power
+-service bugreport /system/bin/dumpstate -d -p -B -z \
+-        -o /data/user_de/0/com.android.shell/files/bugreports/bugreport
+-    class main
+-    disabled
+-    oneshot
+-    keycodes 114 115 116
++#service bugreport /system/bin/dumpstate -d -p -B -z \
++#        -o /data/user_de/0/com.android.shell/files/bugreports/bugreport
++#    class main
++#    disabled
++#    oneshot
++#    keycodes 114 115 116
+ 
+ # start camera server as daemon
+ service qcamerasvr /vendor/bin/mm-qcamera-daemon
+diff --git a/liblight/lights.c b/liblight/lights.c
+index 33ce750..7f0e9cb 100644
+--- a/liblight/lights.c
++++ b/liblight/lights.c
+@@ -36,7 +36,7 @@
+ /*
+  * Change this to 1 to support battery notifications via BatteryService
+  */
+-#define LIGHTS_SUPPORT_BATTERY 0
++#define LIGHTS_SUPPORT_BATTERY 1
+ 
+ #define DEFAULT_LOW_PERSISTENCE_MODE_BRIGHTNESS 255
+ 
+diff --git a/overlay/frameworks/base/core/res/res/values/config.xml b/overlay/frameworks/base/core/res/res/values/config.xml
+index bfcd620..7f3c728 100755
+--- a/overlay/frameworks/base/core/res/res/values/config.xml
++++ b/overlay/frameworks/base/core/res/res/values/config.xml
+@@ -18,6 +18,14 @@
+ -->
+ 
+ <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <string-array name="config_locationProviderPackageNames" translatable="false">
++        <!-- The Google provider -->
++        <item>com.google.android.gms</item>
++        <!-- The standard AOSP fused location provider -->
++        <item>com.android.location.fused</item>
++    </string-array>
++
++    <bool name="config_enableWifiDisplay">true</bool>
+ 
+     <!-- If this is true, the screen will fade off. -->
+     <bool name="config_animateScreenLights">false</bool>
+
+project frameworks/base/
+diff --git a/core/java/android/os/Build.java b/core/java/android/os/Build.java
+index dc7be6b..051ee67 100644
+--- a/core/java/android/os/Build.java
++++ b/core/java/android/os/Build.java
+@@ -731,6 +731,8 @@ public class Build {
+     public static boolean isBuildConsistent() {
+         // Don't care on eng builds.  Incremental build may trigger false negative.
+         if ("eng".equals(TYPE)) return true;
++	if (true)
++		return true;
+ 
+         final String system = SystemProperties.get("ro.build.fingerprint");
+         final String vendor = SystemProperties.get("ro.vendor.build.fingerprint");
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+index 5064d8e..b81423f 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/phone/NotificationPanelView.java
+@@ -63,6 +63,9 @@ import com.android.systemui.statusbar.policy.KeyguardUserSwitcher;
+ import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
+ import com.android.systemui.statusbar.stack.StackStateAnimator;
+ 
++import android.view.GestureDetector;
++import android.os.PowerManager;
++
+ import java.util.List;
+ 
+ public class NotificationPanelView extends PanelView implements
+@@ -196,6 +199,8 @@ public class NotificationPanelView extends PanelView implements
+     private FalsingManager mFalsingManager;
+     private String mLastCameraLaunchSource = KeyguardBottomAreaView.CAMERA_LAUNCH_SOURCE_AFFORDANCE;
+ 
++    private GestureDetector mDoubleTapGesture;
++
+     private Runnable mHeadsUpExistenceChangedRunnable = new Runnable() {
+         @Override
+         public void run() {
+@@ -209,6 +214,15 @@ public class NotificationPanelView extends PanelView implements
+         super(context, attrs);
+         setWillNotDraw(!DEBUG);
+         mFalsingManager = FalsingManager.getInstance(context);
++        mDoubleTapGesture = new GestureDetector(mContext, new GestureDetector.SimpleOnGestureListener() {
++            @Override
++            public boolean onDoubleTap(MotionEvent e) {
++                PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
++                if(pm != null)
++                    pm.goToSleep(e.getEventTime());
++                return true;
++            }
++        });
+     }
+ 
+     public void setStatusBar(PhoneStatusBar bar) {
+@@ -731,6 +745,9 @@ public class NotificationPanelView extends PanelView implements
+         if (mBlockTouches || mQsContainer.isCustomizing()) {
+             return false;
+         }
++        if (mStatusBarState == StatusBarState.KEYGUARD) {
++            mDoubleTapGesture.onTouchEvent(event);
++        }
+         initDownStates(event);
+         if (mListenForHeadsUp && !mHeadsUpTouchHelper.isTrackingHeadsUp()
+                 && mHeadsUpTouchHelper.onInterceptTouchEvent(event)) {
